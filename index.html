@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>MATTEO</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,500;1,300&family=IBM+Plex+Sans:wght@300;400&display=swap');
+
+:root {
+  --bg:     #08080a;
+  --fg:     #e8e0d0;
+  --dim:    rgba(232,224,208,0.38);
+  --dimmer: rgba(232,224,208,0.15);
+  --gold:   #c9a96e;
+  --gold2:  rgba(201,169,110,0.11);
+  --line:   rgba(232,224,208,0.08);
+  --mono:   'IBM Plex Mono', 'Courier New', monospace;
+  --sans:   'IBM Plex Sans', sans-serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.7;
+  min-height: 100vh;
+  overflow-x: hidden;
+  cursor: none;
+}
+
+/* ── THREE.JS CANVAS — fixed background ─────── */
+#bg-canvas {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* ── SCANLINES ──────────────────────────────── */
+.scanlines {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg, transparent, transparent 3px,
+    rgba(0,0,0,0.06) 3px, rgba(0,0,0,0.06) 4px
+  );
+}
+
+/* ── GRAIN ──────────────────────────────────── */
+.grain {
+  position: fixed;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 200px;
+  opacity: 0.025;
+}
+
+/* ── CONTENT LAYER ──────────────────────────── */
+.page {
+  position: relative;
+  z-index: 10;
+}
+
+/* ── CUSTOM CURSOR ──────────────────────────── */
+#cur {
+  position: fixed;
+  width: 13px; height: 13px;
+  border: 1px solid var(--gold);
+  pointer-events: none;
+  z-index: 99999;
+  transform: translate(-50%,-50%);
+  transition: width .18s, height .18s, opacity .3s;
+  opacity: 0;
+}
+#cur::after {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  background: var(--gold);
+  opacity: 0.45;
+}
+#cur.big { width: 22px; height: 22px; }
+
+/* ── SHELL ──────────────────────────────────── */
+.shell { max-width: 840px; margin: 0 auto; padding: 0 28px; }
+
+/* ── HEADER ─────────────────────────────────── */
+header {
+  border-bottom: 1px solid var(--line);
+  padding: 22px 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  opacity: 0;
+  animation: fadein .5s ease forwards .1s;
+}
+.logo {
+  font-size: 11px;
+  letter-spacing: .28em;
+  text-transform: uppercase;
+  color: var(--gold);
+  font-weight: 500;
+}
+.status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+  letter-spacing: .18em;
+  color: var(--dim);
+}
+.live-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: #3ddc84;
+  animation: bpulse 2.2s ease-in-out infinite;
+}
+
+/* ── HERO ───────────────────────────────────── */
+.hero {
+  padding: 80px 0 68px;
+  border-bottom: 1px solid var(--line);
+}
+.hero-pre {
+  font-size: 10px;
+  letter-spacing: .3em;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin-bottom: 26px;
+  opacity: 0;
+  animation: slideup .6s ease forwards .25s;
+}
+.hero-name {
+  font-size: clamp(50px, 11vw, 112px);
+  font-weight: 300;
+  letter-spacing: -.025em;
+  line-height: 1;
+  margin-bottom: 18px;
+  opacity: 0;
+  animation: slideup .8s ease forwards .4s;
+  position: relative;
+  display: inline-block;
+}
+.hero-name::before,
+.hero-name::after {
+  content: attr(data-text);
+  position: absolute;
+  top: 0; left: 0;
+  opacity: 0;
+}
+.hero-name::before { color: var(--gold); animation: g1 8s infinite 3s; }
+.hero-name::after  { color: #5af;        animation: g2 8s infinite 3.06s; }
+
+.blink {
+  display: inline-block;
+  width: 7px; height: .82em;
+  background: var(--gold);
+  vertical-align: baseline;
+  margin-left: 3px;
+  animation: blink .9s step-end infinite;
+}
+.hero-tag {
+  font-size: 11px;
+  letter-spacing: .22em;
+  text-transform: uppercase;
+  color: var(--gold);
+  margin-bottom: 44px;
+  opacity: 0;
+  animation: slideup .6s ease forwards .56s;
+}
+.hero-bio {
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 300;
+  color: var(--dim);
+  max-width: 56ch;
+  line-height: 1.9;
+  opacity: 0;
+  animation: slideup .6s ease forwards .72s;
+}
+
+/* ── SECTION ────────────────────────────────── */
+section {
+  border-bottom: 1px solid var(--line);
+  padding: 60px 0;
+}
+.sec-head {
+  display: flex;
+  align-items: baseline;
+  gap: 18px;
+  margin-bottom: 44px;
+}
+.sec-num { font-size: 10px; letter-spacing: .3em; color: var(--gold); text-transform: uppercase; }
+.sec-lbl { font-size: 10px; letter-spacing: .3em; color: var(--dim);  text-transform: uppercase; }
+
+/* ── SERVICES ───────────────────────────────── */
+.srv-item {
+  display: grid;
+  grid-template-columns: 2fr 1fr 3fr;
+  gap: 20px;
+  align-items: baseline;
+  padding: 17px 0;
+  border-top: 1px solid var(--line);
+  position: relative;
+  cursor: default;
+}
+.srv-item:last-child { border-bottom: 1px solid var(--line); }
+.srv-item::before {
+  content: '';
+  position: absolute;
+  left: -28px; right: -28px; top: 0; bottom: 0;
+  background: var(--gold2);
+  opacity: 0;
+  transition: opacity .25s;
+  pointer-events: none;
+}
+.srv-item:hover::before { opacity: 1; }
+.srv-name  { font-size: 13px; font-weight: 400; }
+.srv-price { font-size: 11px; color: var(--gold); white-space: nowrap; }
+.srv-desc  { font-family: var(--sans); font-size: 12px; color: var(--dim); line-height: 1.7; }
+
+/* ── PROCESO ────────────────────────────────── */
+.proc-item {
+  display: grid;
+  grid-template-columns: 26px 1fr auto;
+  gap: 22px;
+  align-items: center;
+  padding: 19px 0;
+  border-top: 1px solid var(--line);
+}
+.proc-item:last-child { border-bottom: 1px solid var(--line); }
+.proc-n   { font-size: 11px; color: var(--dimmer); }
+.proc-lbl { font-size: 13px; }
+.proc-st  {
+  font-size: 9px; letter-spacing: .22em; text-transform: uppercase;
+  color: #3ddc84; display: flex; align-items: center; gap: 6px;
+}
+.proc-st::before {
+  content: '';
+  width: 5px; height: 5px; border-radius: 50%; background: #3ddc84;
+  animation: bpulse 2.2s ease-in-out infinite;
+}
+
+/* ── STACK ──────────────────────────────────── */
+.stack-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  border: 1px solid var(--line);
+  gap: 1px;
+}
+.stack-item {
+  padding: 18px 16px;
+  font-size: 11px;
+  letter-spacing: .08em;
+  color: var(--dim);
+  transition: color .2s, background .2s;
+  cursor: default;
+  position: relative;
+  overflow: hidden;
+  border-right: 1px solid var(--line);
+}
+.stack-item::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0;
+  width: 100%; height: 1px;
+  background: var(--gold);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform .32s ease;
+}
+.stack-item:hover { color: var(--fg); background: rgba(201,169,110,.06); }
+.stack-item:hover::after { transform: scaleX(1); }
+.s-cat {
+  display: block;
+  font-size: 9px; letter-spacing: .26em; text-transform: uppercase;
+  color: var(--gold); margin-bottom: 5px;
+}
+
+/* ── FOOTER ─────────────────────────────────── */
+footer {
+  padding: 50px 0 38px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 28px;
+}
+.ct-lbl { font-size: 9px; letter-spacing: .3em; text-transform: uppercase; color: var(--dimmer); margin-bottom: 12px; }
+.ct-link {
+  display: inline-flex; align-items: center; gap: 9px;
+  font-size: 12px; letter-spacing: .08em; color: var(--gold);
+  text-decoration: none;
+  border-bottom: 1px solid rgba(201,169,110,.28);
+  padding-bottom: 2px;
+  transition: border-color .2s;
+}
+.ct-link:hover { border-color: var(--gold); }
+.arr { font-size: 10px; transition: transform .2s; }
+.ct-link:hover .arr { transform: translateX(4px); }
+.foot-sig { font-size: 10px; color: var(--dimmer); letter-spacing: .1em; text-align: right; }
+.foot-sig em { color: rgba(232,224,208,0.18); font-style: normal; }
+
+/* ── KEYFRAMES ──────────────────────────────── */
+@keyframes fadein  { to { opacity: 1; } }
+@keyframes slideup { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:none; } }
+@keyframes blink   { 0%,100%{opacity:1} 50%{opacity:0} }
+@keyframes bpulse  { 0%,100%{opacity:.5;transform:scale(1)} 50%{opacity:1;transform:scale(1.35)} }
+@keyframes g1 {
+  0%,93%,100%{opacity:0;transform:none}
+  94%{opacity:.65;transform:translate(-3px,1px) skewX(-5deg);clip-path:inset(20% 0 55% 0)}
+  96%{opacity:.4;transform:translate(3px,-1px);clip-path:inset(58% 0 18% 0)}
+}
+@keyframes g2 {
+  0%,93%,100%{opacity:0;transform:none}
+  94%{opacity:.5;transform:translate(3px,-1px) skewX(4deg);clip-path:inset(38% 0 42% 0)}
+  96%{opacity:.3;transform:translate(-2px,2px);clip-path:inset(8% 0 72% 0)}
+}
+
+/* ── SCROLL REVEAL ──────────────────────────── */
+.reveal { opacity:0; transform:translateY(14px); transition:opacity .7s ease, transform .7s ease; }
+.reveal.in { opacity:1; transform:none; }
+
+/* ── RESPONSIVE ─────────────────────────────── */
+@media(max-width:600px){
+  .srv-item { grid-template-columns:1fr; gap:5px; }
+  footer { flex-direction:column; align-items:flex-start; }
+  .foot-sig { text-align:left; }
+}
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after { animation:none!important; transition:none!important; }
+  header,.hero-pre,.hero-name,.hero-tag,.hero-bio { opacity:1!important; }
+  .reveal { opacity:1!important; transform:none!important; }
+}
+</style>
+</head>
+<body>
+
+<!-- Three.js background canvas -->
+<canvas id="bg-canvas"></canvas>
+
+<!-- Overlays -->
+<div class="scanlines"></div>
+<div class="grain"></div>
+
+<!-- Cursor -->
+<div id="cur"></div>
+
+<!-- Page content -->
+<div class="page">
+<div class="shell">
+
+  <!-- HEADER -->
+  <header>
+    <span class="logo">Matteo</span>
+    <span class="status"><span class="live-dot"></span>disponible para proyectos</span>
+  </header>
+
+  <!-- HERO -->
+  <div class="hero">
+    <p class="hero-pre">// portfolio — 2025</p>
+    <h1 class="hero-name" data-text="MATTEO">MATTEO<span class="blink"></span></h1>
+    <p class="hero-tag">Sitios Web Creator</p>
+    <p class="hero-bio">
+      Diseño y desarrollo sitios web que se sienten premium desde el primer scroll.
+      Me interesa el detalle, la jerarquía visual y la precisión técnica.
+      Aprendo de forma autodidacta, iterando hasta que cada elemento tiene sentido.
+      Mi objetivo es construir presencias digitales que generen confianza y valor real.
+    </p>
+  </div>
+
+  <!-- 1 · PERFIL -->
+  <section class="reveal">
+    <div class="sec-head">
+      <span class="sec-num">1</span>
+      <span class="sec-lbl">Perfil</span>
+    </div>
+    <p style="font-family:var(--sans);font-size:14px;font-weight:300;color:var(--dim);max-width:60ch;line-height:1.9;">
+      Me llamo Matteo. Llevo más de cuatro años construyendo cosas en la web y en Roblox —
+      diseño, scripting, modelado 3D e integración de IA. Soy multidisciplinar por convicción,
+      no por accidente. Cada proyecto es una oportunidad de hacer algo que todavía no existe.
+    </p>
+  </section>
+
+  <!-- 2 · SERVICIOS -->
+  <section class="reveal">
+    <div class="sec-head">
+      <span class="sec-num">2</span>
+      <span class="sec-lbl">Servicios</span>
+    </div>
+
+    <div class="srv-item">
+      <span class="srv-name">Landing Pages</span>
+      <span class="srv-price">80 – 200 USD</span>
+      <span class="srv-desc">Páginas de aterrizaje con estética editorial, tipografía precisa y animaciones que justifican el scroll.</span>
+    </div>
+    <div class="srv-item">
+      <span class="srv-name">Sitio Completo</span>
+      <span class="srv-price">200 – 600 USD</span>
+      <span class="srv-desc">Diseño y desarrollo multipágina para marcas, freelancers o negocios que quieren presencia real en la web.</span>
+    </div>
+    <div class="srv-item">
+      <span class="srv-name">Rediseño</span>
+      <span class="srv-price">150 – 400 USD</span>
+      <span class="srv-desc">Renovación visual y técnica de un sitio existente. Velocidad, jerarquía, responsividad y estética.</span>
+    </div>
+    <div class="srv-item">
+      <span class="srv-name">UI / Componentes</span>
+      <span class="srv-price">50 – 180 USD</span>
+      <span class="srv-desc">Secciones aisladas, sistemas de componentes o interfaces para apps y productos.</span>
+    </div>
+    <div class="srv-item">
+      <span class="srv-name">Experiencias WebGL</span>
+      <span class="srv-price">300 – 700 USD</span>
+      <span class="srv-desc">Sites con Three.js, efectos 3D y micro-interacciones que elevan la percepción de marca.</span>
+    </div>
+    <div class="srv-item">
+      <span class="srv-name">Mantenimiento</span>
+      <span class="srv-price">40 – 100 USD/m</span>
+      <span class="srv-desc">Soporte mensual, actualizaciones de contenido y mejoras iterativas continuas.</span>
+    </div>
+    <div class="srv-item">
+      <span class="srv-name">Consultoría</span>
+      <span class="srv-price">25 – 60 USD/h</span>
+      <span class="srv-desc">Revisión de proyectos, dirección de diseño o asesoría técnica. Directo y sin rodeos.</span>
+    </div>
+
+  </section>
+
+  <!-- 3 · PROCESO -->
+  <section class="reveal">
+    <div class="sec-head">
+      <span class="sec-num">3</span>
+      <span class="sec-lbl">Metodología</span>
+    </div>
+
+    <div class="proc-item">
+      <span class="proc-n">01</span>
+      <span class="proc-lbl">Brief y definición de objetivos claros.</span>
+      <span class="proc-st">activo</span>
+    </div>
+    <div class="proc-item">
+      <span class="proc-n">02</span>
+      <span class="proc-lbl">Referentes, paleta, tipografía y dirección visual.</span>
+      <span class="proc-st">activo</span>
+    </div>
+    <div class="proc-item">
+      <span class="proc-n">03</span>
+      <span class="proc-lbl">Desarrollo e iteración con revisiones en vivo.</span>
+      <span class="proc-st">activo</span>
+    </div>
+    <div class="proc-item">
+      <span class="proc-n">04</span>
+      <span class="proc-lbl">QA, optimización de performance y entrega final.</span>
+      <span class="proc-st">activo</span>
+    </div>
+
+  </section>
+
+  <!-- 4 · STACK -->
+  <section class="reveal">
+    <div class="sec-head">
+      <span class="sec-num">4</span>
+      <span class="sec-lbl">Stack</span>
+    </div>
+    <div class="stack-grid">
+      <div class="stack-item"><span class="s-cat">markup</span>HTML5 / CSS3</div>
+      <div class="stack-item"><span class="s-cat">scripting</span>JavaScript</div>
+      <div class="stack-item"><span class="s-cat">3D web</span>Three.js</div>
+      <div class="stack-item"><span class="s-cat">animación</span>GSAP</div>
+      <div class="stack-item"><span class="s-cat">framework</span>React</div>
+      <div class="stack-item"><span class="s-cat">game dev</span>Lua / Roblox</div>
+      <div class="stack-item"><span class="s-cat">deploy</span>Netlify / Vercel</div>
+      <div class="stack-item"><span class="s-cat">diseño</span>Figma</div>
+      <div class="stack-item"><span class="s-cat">3D modeling</span>Blender</div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer>
+    <div>
+      <p class="ct-lbl">// contacto</p>
+      <a href="mailto:matteo@guarino.co" class="ct-link">
+        matteo@guarino.co <span class="arr">→</span>
+      </a>
+    </div>
+    <p class="foot-sig">
+      MATTEO // 2025<br/>
+      <em>sitios web creator</em>
+    </p>
+  </footer>
+
+</div><!-- /shell -->
+</div><!-- /page -->
+
+
+<script>
+(() => {
+  'use strict';
+
+  /* ── CURSOR ──────────────────────────────────────────────── */
+  const cur = document.getElementById('cur');
+  document.addEventListener('mousemove', e => {
+    cur.style.opacity = '1';
+    cur.style.left = e.clientX + 'px';
+    cur.style.top  = e.clientY + 'px';
+  });
+  document.querySelectorAll('a,.srv-item,.stack-item,.proc-item').forEach(el => {
+    el.addEventListener('mouseenter', () => cur.classList.add('big'));
+    el.addEventListener('mouseleave', () => cur.classList.remove('big'));
+  });
+
+  /* ── SCROLL REVEAL ───────────────────────────────────────── */
+  const obs = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) { e.target.classList.add('in'); obs.unobserve(e.target); }
+    });
+  }, { threshold: 0.06 });
+  document.querySelectorAll('.reveal').forEach(el => obs.observe(el));
+
+  /* ── THREE.JS UNIVERSE BACKGROUND ───────────────────────── */
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // WebGL check
+  function webglOk() {
+    try {
+      const c = document.createElement('canvas');
+      return !!(window.WebGLRenderingContext &&
+        (c.getContext('webgl') || c.getContext('experimental-webgl')));
+    } catch(e) { return false; }
+  }
+  if (!webglOk()) return;
+
+  const canvas   = document.getElementById('bg-canvas');
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, window.innerWidth < 768 ? 1.2 : 1.8));
+  renderer.setClearColor(0x08080a, 1);
+
+  const scene  = new THREE.Scene();
+  const W = window.innerWidth, H = window.innerHeight;
+  const camera = new THREE.PerspectiveCamera(60, W / H, 0.1, 200);
+  camera.position.set(0, 0, 28);
+
+  function resize() {
+    const w = window.innerWidth, h = window.innerHeight;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  /* ── STAR FIELD ──────────────────────────────────────────── */
+  const starCount = window.innerWidth < 768 ? 1400 : 2800;
+  const starPos   = new Float32Array(starCount * 3);
+  const starSizes = new Float32Array(starCount);
+
+  for (let i = 0; i < starCount; i++) {
+    // Distribute on a sphere shell so stars are all around
+    const r     = 30 + Math.random() * 80;
+    const theta = Math.random() * Math.PI * 2;
+    const phi   = Math.acos(2 * Math.random() - 1);
+    starPos[i*3]   = r * Math.sin(phi) * Math.cos(theta);
+    starPos[i*3+1] = r * Math.sin(phi) * Math.sin(theta);
+    starPos[i*3+2] = r * Math.cos(phi);
+    starSizes[i] = 0.4 + Math.random() * 1.8;
+  }
+
+  const starGeo = new THREE.BufferGeometry();
+  starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+  starGeo.setAttribute('size',     new THREE.BufferAttribute(starSizes, 1));
+
+  const starMat = new THREE.PointsMaterial({
+    color: 0xfff5e8,
+    size: 0.18,
+    sizeAttenuation: true,
+    transparent: true,
+    opacity: 0.75,
+    depthWrite: false,
+  });
+
+  const stars = new THREE.Points(starGeo, starMat);
+  scene.add(stars);
+
+  /* ── GOLD DUST (closer, warmer tiny particles) ───────────── */
+  const dustCount = window.innerWidth < 768 ? 300 : 700;
+  const dustPos   = new Float32Array(dustCount * 3);
+  for (let i = 0; i < dustCount; i++) {
+    dustPos[i*3]   = (Math.random() - 0.5) * 60;
+    dustPos[i*3+1] = (Math.random() - 0.5) * 40;
+    dustPos[i*3+2] = (Math.random() - 0.5) * 30;
+  }
+  const dustGeo = new THREE.BufferGeometry();
+  dustGeo.setAttribute('position', new THREE.BufferAttribute(dustPos, 3));
+  const dustMat = new THREE.PointsMaterial({
+    color: 0xc9a96e,
+    size: 0.08,
+    sizeAttenuation: true,
+    transparent: true,
+    opacity: 0.35,
+    depthWrite: false,
+  });
+  const dust = new THREE.Points(dustGeo, dustMat);
+  scene.add(dust);
+
+  /* ── TON 618 — BLACK HOLE CENTER ─────────────────────────── */
+  const bhGroup = new THREE.Group();
+  // Place it top-right quadrant (off-center like the reference site)
+  bhGroup.position.set(10, 4, -12);
+  scene.add(bhGroup);
+
+  // Event horizon
+  const horizonMesh = new THREE.Mesh(
+    new THREE.SphereGeometry(2.2, 64, 64),
+    new THREE.MeshBasicMaterial({ color: 0x000000 })
+  );
+  bhGroup.add(horizonMesh);
+
+  // Photon sphere glow (back-side transparent shell)
+  bhGroup.add(new THREE.Mesh(
+    new THREE.SphereGeometry(2.35, 64, 64),
+    new THREE.MeshBasicMaterial({
+      color: 0xd4a040, transparent: true, opacity: 0.07, side: THREE.BackSide, depthWrite: false
+    })
+  ));
+
+  // Helper: ring layer
+  function ring(inner, outer, color, opacity, tilt) {
+    const m = new THREE.Mesh(
+      new THREE.RingGeometry(inner, outer, 120),
+      new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide, transparent: true, opacity, depthWrite: false })
+    );
+    m.rotation.x = tilt;
+    return m;
+  }
+
+  const TILT = Math.PI * 0.19;
+  bhGroup.add(ring(2.25, 3.1,  0xffcc66, 0.75, TILT));   // bright inner
+  bhGroup.add(ring(3.1,  4.5,  0xe8903a, 0.45, TILT));   // mid
+  bhGroup.add(ring(4.5,  6.2,  0xa05020, 0.22, TILT));   // outer haze
+  bhGroup.add(ring(6.2,  8.5,  0x6a2e08, 0.09, TILT));   // far diffuse
+
+  // Lensing arc
+  const arcMesh = new THREE.Mesh(
+    new THREE.TorusGeometry(2.28, 0.06, 12, 180, Math.PI * 1.65),
+    new THREE.MeshBasicMaterial({ color: 0xffe090, transparent: true, opacity: 0.5, depthWrite: false })
+  );
+  arcMesh.rotation.x = Math.PI * 0.5;
+  arcMesh.rotation.z = Math.PI * 0.15;
+  bhGroup.add(arcMesh);
+
+  // Disk warm point light
+  const diskLight = new THREE.PointLight(0xd4913a, 5, 20);
+  diskLight.position.set(0, -0.5, 0);
+  bhGroup.add(diskLight);
+
+  // Outer ambient glow (huge dim sphere)
+  bhGroup.add(new THREE.Mesh(
+    new THREE.SphereGeometry(9, 32, 32),
+    new THREE.MeshBasicMaterial({ color: 0xc08030, transparent: true, opacity: 0.03, side: THREE.BackSide, depthWrite: false })
+  ));
+
+  /* ── SCROLL PARALLAX ─────────────────────────────────────── */
+  let scrollY = 0;
+  window.addEventListener('scroll', () => { scrollY = window.scrollY; }, { passive: true });
+
+  /* ── ANIMATION LOOP ──────────────────────────────────────── */
+  const clock = new THREE.Clock();
+
+  function animate() {
+    requestAnimationFrame(animate);
+    if (reduced) { renderer.render(scene, camera); return; }
+
+    const t = clock.getElapsedTime();
+
+    // Slow rotation of star field — gives drifting universe feel
+    stars.rotation.y = t * 0.006;
+    stars.rotation.x = t * 0.002;
+
+    // Gold dust drifts slightly faster
+    dust.rotation.y = t * 0.012;
+
+    // Black hole spins
+    bhGroup.rotation.y = t * 0.14;
+    bhGroup.rotation.z = Math.sin(t * 0.25) * 0.02;
+
+    // Disk light pulse (magnetic flare sim)
+    diskLight.intensity = 4.5 + Math.sin(t * 1.6) * 0.8;
+
+    // Parallax: camera nudges up as user scrolls down
+    camera.position.y = -scrollY * 0.003;
+
+    renderer.render(scene, camera);
+  }
+
+  animate();
+
+})();
+</script>
+</body>
+</html>
